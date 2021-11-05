@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8.4;
 
-interface ILottery {
+interface ILunaChowLottery {
     /**
      * @notice Buy tickets for the current lottery
      * @param _lotteryId: lotteryId
