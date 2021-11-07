@@ -448,7 +448,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         pendingInjectionNextLottery = 0;
     }
 
-    /**
+        /**
      * @notice It allows the admin to recover wrong tokens sent to the contract
      * @param _tokenAddress: the address of the token to withdraw
      * @param _tokenAmount: the number of token amount to withdraw
