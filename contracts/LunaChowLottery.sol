@@ -4,8 +4,11 @@ pragma solidity ^0.8.4;
 pragma abicoder v2;
 
 import "./interfaces/ILunaChowLottery.sol";
+import "./interfaces/ILunaChowToken.sol";
+import "./interfaces/IRandomNumberGenerator.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /** @title LunaChow Lottery.
  * @notice It is a contract for a lottery system using
@@ -17,6 +20,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
     address public injectorAddress;
     address public operatorAddress;
     address public treasuryAddress;
+    address public charityAddress;
 
     uint256 public currentLotteryId;
     uint256 public currentTicketId;
@@ -32,8 +36,9 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
     uint256 public constant MIN_LENGTH_LOTTERY = 4 hours - 5 minutes; // 4 hours
     uint256 public constant MAX_LENGTH_LOTTERY = 4 days + 5 minutes; // 4 days
     uint256 public constant MAX_TREASURY_FEE = 3000; // 30%
+    uint256 public constant MAX_CHARITY_FEE = 3000; // 30%
 
-    IERC20 public luchowToken;
+    ILunaChowToken public luchowToken;
     IRandomNumberGenerator public randomGenerator;
 
     enum Status {
@@ -50,7 +55,9 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         uint256 priceTicketInLuchow;
         uint256 discountDivisor;
         uint256[6] rewardsBreakdown; // 0: 1 matching number // 5: 6 matching numbers
+        uint256 burnFee; // 500: 5% // 200: 2% // 50: 0.5%
         uint256 treasuryFee; // 500: 5% // 200: 2% // 50: 0.5%
+        uint256 charityFee; // 500: 5% // 200: 2% // 50: 0.5%
         uint256[6] luchowPerBracket;
         uint256[6] countWinnersPerBracket;
         uint256 firstTicketId;
@@ -105,7 +112,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         uint256 injectedAmount
     );
     event LotteryNumberDrawn(uint256 indexed lotteryId, uint256 finalNumber, uint256 countWinningTickets);
-    event NewOperatorAndTreasuryAndInjectorAddresses(address operator, address treasury, address injector);
+    event NewOperatorAndTreasuryAndCharityAndInjectorAddresses(address operator, address treasury, address charity, address injector);
     event NewRandomGenerator(address indexed randomGenerator);
     event TicketsPurchase(address indexed buyer, uint256 indexed lotteryId, uint256 numberTickets);
     event TicketsClaim(address indexed claimer, uint256 amount, uint256 indexed lotteryId, uint256 numberTickets);
@@ -117,7 +124,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
      * @param _randomGeneratorAddress: address of the RandomGenerator contract used to work with ChainLink VRF
      */
     constructor(address _luchowTokenAddress, address _randomGeneratorAddress) {
-        luchowToken = IERC20(_luchowTokenAddress);
+        luchowToken = ILunaChowToken(_luchowTokenAddress);
         randomGenerator = IRandomNumberGenerator(_randomGeneratorAddress);
 
         // Initializes a mapping
@@ -155,7 +162,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         );
 
         // Transfer luchow tokens to this contract
-        luchowToken.safeTransferFrom(address(msg.sender), address(this), amountLuchowToTransfer);
+        luchowToken.transferFrom(address(msg.sender), address(this), amountLuchowToTransfer);
 
         // Increment the total amount collected for the lottery round
         _lotteries[_lotteryId].amountCollectedInLuchow += amountLuchowToTransfer;
@@ -232,7 +239,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         }
 
         // Transfer money to msg.sender
-        luchowToken.safeTransfer(msg.sender, rewardInLuchowToTransfer);
+        luchowToken.transfer(msg.sender, rewardInLuchowToTransfer);
 
         emit TicketsClaim(msg.sender, rewardInLuchowToTransfer, _lotteryId, _ticketIds.length);
     }
@@ -247,8 +254,8 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         require(block.timestamp > _lotteries[_lotteryId].endTime, "Lottery not over");
         _lotteries[_lotteryId].firstTicketIdNextLottery = currentTicketId;
 
-        // Request a random number from the generator based on a seed
-        randomGenerator.getRandomNumber(uint256(keccak256(abi.encodePacked(_lotteryId, currentTicketId))));
+        // Request a random number from the generator
+        randomGenerator.getRandomNumber();
 
         _lotteries[_lotteryId].status = Status.Close;
 
@@ -276,13 +283,16 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         // Initialize a number to count addresses in the previous bracket
         uint256 numberAddressesInPreviousBracket;
 
-        // Calculate the amount to share post-treasury fee
+        // Calculate the amount to share post-burn, treasury, charity fee
         uint256 amountToShareToWinners = (
-            ((_lotteries[_lotteryId].amountCollectedInLuchow) * (10000 - _lotteries[_lotteryId].treasuryFee))
+            ((_lotteries[_lotteryId].amountCollectedInLuchow) * (10000 - _lotteries[_lotteryId].treasuryFee - _lotteries[_lotteryId].burnFee - _lotteries[_lotteryId].charityFee))
         ) / 10000;
 
-        // Initializes the amount to withdraw to treasury
+        // Initializes the amount to withdraw to treasury, charity, burn
+        uint256 amountToWithdrawToBurn;
         uint256 amountToWithdrawToTreasury;
+        uint256 amountToWithdrawToCharity;
+        uint256 amountRest;
 
         // Calculate prizes in LUCHOW for each bracket by starting from the highest one
         for (uint32 i = 0; i < 6; i++) {
@@ -300,11 +310,8 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
             ) {
                 // B. If rewards at this bracket are > 0, calculate, else, report the numberAddresses from previous bracket
                 if (_lotteries[_lotteryId].rewardsBreakdown[j] != 0) {
-                    _lotteries[_lotteryId].luchowPerBracket[j] =
-                        ((_lotteries[_lotteryId].rewardsBreakdown[j] * amountToShareToWinners) /
-                            (_numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] -
-                                numberAddressesInPreviousBracket)) /
-                        10000;
+                    _lotteries[_lotteryId].luchowPerBracket[j] = (_lotteries[_lotteryId].rewardsBreakdown[j] * amountToShareToWinners) / (_numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] - numberAddressesInPreviousBracket);
+                    _lotteries[_lotteryId].luchowPerBracket[j] /= 10000;
 
                     // Update numberAddressesInPreviousBracket
                     numberAddressesInPreviousBracket = _numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber];
@@ -328,10 +335,17 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
             amountToWithdrawToTreasury = 0;
         }
 
-        amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners);
+        amountRest = _lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners;
+        amountToWithdrawToBurn += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners) * _lotteries[_lotteryId].burnFee / (_lotteries[_lotteryId].treasuryFee + _lotteries[_lotteryId].burnFee + _lotteries[_lotteryId].charityFee);
+        amountToWithdrawToCharity += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners) * _lotteries[_lotteryId].charityFee / (_lotteries[_lotteryId].treasuryFee + _lotteries[_lotteryId].burnFee + _lotteries[_lotteryId].charityFee);
+        amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners - amountToWithdrawToBurn - amountToWithdrawToCharity);
 
+        // Burn LUCHOW token
+        luchowToken.burn(amountToWithdrawToBurn);
         // Transfer LUCHOW to treasury address
-        luchowToken.safeTransfer(treasuryAddress, amountToWithdrawToTreasury);
+        luchowToken.transfer(treasuryAddress, amountToWithdrawToTreasury);
+        // Transfer LUCHOW to charity address
+        luchowToken.transfer(charityAddress, amountToWithdrawToCharity);
 
         emit LotteryNumberDrawn(currentLotteryId, finalNumber, numberAddressesInPreviousBracket);
     }
@@ -347,9 +361,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         require(_lotteries[currentLotteryId].status == Status.Claimable, "Lottery not in claimable");
 
         // Request a random number from the generator based on a seed
-        IRandomNumberGenerator(_randomGeneratorAddress).getRandomNumber(
-            uint256(keccak256(abi.encodePacked(currentLotteryId, currentTicketId)))
-        );
+        IRandomNumberGenerator(_randomGeneratorAddress).getRandomNumber();
 
         // Calculate the finalNumber based on the randomResult generated by ChainLink's fallback
         IRandomNumberGenerator(_randomGeneratorAddress).viewRandomResult();
@@ -368,7 +380,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
     function injectFunds(uint256 _lotteryId, uint256 _amount) external override onlyOwnerOrInjector {
         require(_lotteries[_lotteryId].status == Status.Open, "Lottery not open");
 
-        luchowToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+        luchowToken.transferFrom(address(msg.sender), address(this), _amount);
         _lotteries[_lotteryId].amountCollectedInLuchow += _amount;
 
         emit LotteryInjection(_lotteryId, _amount);
@@ -381,14 +393,18 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
      * @param _priceTicketInLuchow: price of a ticket in LUCHOW
      * @param _discountDivisor: the divisor to calculate the discount magnitude for bulks
      * @param _rewardsBreakdown: breakdown of rewards per bracket (must sum to 10,000)
+     * @param _burnFee: burn fee (10,000 = 100%, 100 = 1%)
      * @param _treasuryFee: treasury fee (10,000 = 100%, 100 = 1%)
+     * @param _charityFee: charity fee (10,000 = 100%, 100 = 1%)
      */
     function startLottery(
         uint256 _endTime,
         uint256 _priceTicketInLuchow,
         uint256 _discountDivisor,
         uint256[6] calldata _rewardsBreakdown,
-        uint256 _treasuryFee
+        uint256 _burnFee,
+        uint256 _treasuryFee,
+        uint256 _charityFee
     ) external override onlyOperator {
         require(
             (currentLotteryId == 0) || (_lotteries[currentLotteryId].status == Status.Claimable),
@@ -406,6 +422,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         );
 
         require(_discountDivisor >= MIN_DISCOUNT_DIVISOR, "Discount divisor too low");
+        require(_charityFee <= MAX_CHARITY_FEE, "Charity fee too high");
         require(_treasuryFee <= MAX_TREASURY_FEE, "Treasury fee too high");
 
         require(
@@ -427,7 +444,9 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
             priceTicketInLuchow: _priceTicketInLuchow,
             discountDivisor: _discountDivisor,
             rewardsBreakdown: _rewardsBreakdown,
+            burnFee: _burnFee,
             treasuryFee: _treasuryFee,
+            charityFee: _charityFee,
             luchowPerBracket: [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)],
             countWinnersPerBracket: [uint256(0), uint256(0), uint256(0), uint256(0), uint256(0), uint256(0)],
             firstTicketId: currentTicketId,
@@ -492,22 +511,26 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
      * @dev Only callable by owner
      * @param _operatorAddress: address of the operator
      * @param _treasuryAddress: address of the treasury
+     * @param _charityAddress: address of the charity
      * @param _injectorAddress: address of the injector
      */
-    function setOperatorAndTreasuryAndInjectorAddresses(
+    function setOperatorAndTreasuryAndCharityAndInjectorAddresses(
         address _operatorAddress,
         address _treasuryAddress,
+        address _charityAddress,
         address _injectorAddress
     ) external onlyOwner {
         require(_operatorAddress != address(0), "Cannot be zero address");
         require(_treasuryAddress != address(0), "Cannot be zero address");
+        require(_charityAddress != address(0), "Cannot be zero address");
         require(_injectorAddress != address(0), "Cannot be zero address");
 
         operatorAddress = _operatorAddress;
         treasuryAddress = _treasuryAddress;
+        charityAddress = _charityAddress;
         injectorAddress = _injectorAddress;
 
-        emit NewOperatorAndTreasuryAndInjectorAddresses(_operatorAddress, _treasuryAddress, _injectorAddress);
+        emit NewOperatorAndTreasuryAndCharityAndInjectorAddresses(_operatorAddress, _treasuryAddress, _charityAddress, _injectorAddress);
     }
 
     /**

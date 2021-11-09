@@ -17,8 +17,9 @@ module.exports = {
         auto: false,
         interval: 5000
       },
-      blockGasLimit: 13000000,
-      gasPrice: 20
+      blockGasLimit: 0x1fffffffffffff,
+      gasPrice: 12000000,
+      allowUnlimitedContractSize: true,
     },
   },
   solidity: {
@@ -31,7 +32,15 @@ module.exports = {
       },
       {
         version: "0.7.3"
+      },
+      {
+        version: "0.8.4"
       }
-    ]
+    ],
+		settings: {
+      optimizer: {
+        enabled: true,
+      },
+    },
   } 
 };

@@ -4,9 +4,9 @@ pragma solidity ^0.8.4;
 import "./interfaces/ILunaChowLottery.sol";
 import "./interfaces/IRandomNumberGenerator.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
+import "@chainlink/contracts/src/v0.8/dev/VRFConsumerBase.sol";
 
 contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownable {
     using SafeERC20 for IERC20;
@@ -32,14 +32,13 @@ contract RandomNumberGenerator is VRFConsumerBase, IRandomNumberGenerator, Ownab
 
     /**
      * @notice Request randomness from a user-provided seed
-     * @param _seed: seed provided by the Lottery
      */
-    function getRandomNumber(uint256 _seed) external override {
+    function getRandomNumber() external override {
         require(msg.sender == lunaChowLottery, "Only LunaChowLottery");
         require(keyHash != bytes32(0), "Must have valid key hash");
         require(LINK.balanceOf(address(this)) >= fee, "Not enough LINK tokens");
 
-        latestRequestId = requestRandomness(keyHash, fee, _seed);
+        latestRequestId = requestRandomness(keyHash, fee);
     }
 
     /**
