@@ -3,7 +3,7 @@ const { network, ethers } = require("hardhat");
 const { 
     lotto,
     BigNumber,
-    generateLottoNumbers
+    generateLottoNumbers,
 } = require("./settings.js");
 
 describe("Lottery contract", function() {
@@ -162,5 +162,364 @@ describe("Lottery contract", function() {
                 )
             ).to.be.revertedWith(lotto.errors.invalid_rewards_breakdown_total);
         })
+        /**
+         * Testing that an invalid cost 
+         */
+        it("Invalid cost", async function() {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await expect(
+                lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.errorData.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_cost);
+        })
+        /**
+         * Testing that an invalid timestamp 
+         */
+        it("Invalid timestamp", async function() {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await expect(
+                lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.closeIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_timestamp);
+        })
+        /**
+         * Testing that an invalid discount divisor 
+         */
+        it("Invalid discount divisor", async function() {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await expect(
+                lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.errorData.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_divisor);
+        })
+        /**
+         * Testing that an invalid charity fee
+         */
+        it("Invalid charity fee", async function() {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await expect(
+                lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.errorData.charityFee,
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_charity);
+        })
+        /**
+         * Testing that an invalid treasury fee
+         */
+        it("Invalid treasury fee", async function() {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await expect(
+                lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.errorData.treasuryFee,
+                    lotto.newLotto.charityFee,
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_treasury);
+        })
     });
+
+    describe("Buying tickets tests", function() {
+        /**
+         * Creating a lottery for all buying tests to use. Will be a new instance
+         * for each lottery
+         */
+        beforeEach( async() => {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                );
+        })
+        /**
+         * Tests the batch buying of one ticket
+         */
+        it("Batch buying 1 tickets", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 1,
+                lottoSize: lotto.setup.sizeOfLottery,
+                maxRange: lotto.setup.maxValidRange
+            });
+            // Approving lottery to spend cost
+            await luchowInstance.approve(
+                lotteryInstance.address,
+                price
+            );
+            // Batch buying tickets
+            await lotteryInstance.buyTickets(
+                lotteryId,
+                ticketNumbers
+            );
+            // Testing results
+            assert.equal(
+                price.toString(),
+                lotto.buy.one.cost,
+                "Incorrect cost for batch buy of 1"
+            );
+        })
+        /**
+         * Tests the batch buying of ten token
+         */
+        it("Batch buying 10 tickets", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                10
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 10,
+                lottoSize: lotto.setup.sizeOfLottery,
+                maxRange: lotto.setup.maxValidRange
+            });
+            // Approving lottery to spend cost
+            await luchowInstance.approve(
+                lotteryInstance.address,
+                price
+            );
+            // Batch buying tickets
+            await lotteryInstance.buyTickets(
+                lotteryId,
+                ticketNumbers
+            );
+            // Testing results
+            assert.equal(
+                price.toString(),
+                lotto.buy.ten.cost,
+                "Incorrect cost for batch buy of 10"
+            );
+        })
+        /**
+         * Tests the batch buying with invalid ticket numbers
+         */
+        it("Invalid chosen numbers", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+
+            // Approving lottery to spend cost
+            await luchowInstance.approve(
+                lotteryInstance.address,
+                price
+            );
+            // Batch buying tickets
+            await expect(
+                    lotteryInstance.buyTickets(
+                    lotteryId,
+                    lotto.errorData.ticketNumbers
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_ticket_number)
+        })
+        /**
+         * Tests the batch buying with invalid buying ticket numbers count
+         */
+        it("Invalid buying ticket numbers count", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                105
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 105,
+                lottoSize: lotto.setup.sizeOfLottery,
+                maxRange: lotto.setup.maxValidRange
+            });
+            // Approving lottery to spend cost
+            await luchowInstance.approve(
+                lotteryInstance.address,
+                price
+            );
+            // Batch buying tickets
+            await expect(
+                    lotteryInstance.buyTickets(
+                    lotteryId,
+                    ticketNumbers
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_ticket_numbers_count)
+        })
+        /**
+         * Tests the batch buying with invalid buying lottery id
+         */
+        it("Invalid buying lottery id", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 1,
+                lottoSize: lotto.setup.sizeOfLottery,
+                maxRange: lotto.setup.maxValidRange
+            });
+            // Approving lottery to spend cost
+            await luchowInstance.approve(
+                lotteryInstance.address,
+                price
+            );
+            // Batch buying tickets
+            await expect(
+                    lotteryInstance.buyTickets(
+                    lotteryId + 1,
+                    ticketNumbers
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_lottery)
+        })
+        /**
+         * Tests the batch buying with invalid buying time
+         */
+        it("Invalid buying time", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 1,
+                lottoSize: lotto.setup.sizeOfLottery,
+                maxRange: lotto.setup.maxValidRange
+            });
+            // Approving lottery to spend cost
+            await luchowInstance.approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            await ethers.provider.send("evm_increaseTime", [36000]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Batch buying tickets
+            await expect(
+                    lotteryInstance.buyTickets(
+                    lotteryId,
+                    ticketNumbers
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_buying_time)
+        })
+        /**
+         * Tests the batch buying with invalid approve
+         */
+        it("Invalid luchow transfer", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 1,
+                lottoSize: lotto.setup.sizeOfLottery,
+                maxRange: lotto.setup.maxValidRange
+            });
+            // Batch buying tickets
+            await expect(
+                    lotteryInstance.buyTickets(
+                    lotteryId,
+                    ticketNumbers
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_mint_approve)
+        })
+    })
 });
