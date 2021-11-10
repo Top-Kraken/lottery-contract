@@ -3,8 +3,8 @@ const { BigNumber } = require("bignumber.js");
 
 const lotto = {
     setup: {
-        sizeOfLottery: 4,
-        maxValidRange: 20,
+        sizeOfLottery: 6,
+        maxValidRange: 10,
         bucket: {
             one: 20,
             two: 50
@@ -65,7 +65,7 @@ const lotto = {
             cost: "10000000000000000000"
         },
         ten: {
-            cost: "100000000000000000000"
+            cost: "99550000000000000000"
         },
         fifty: {
             cost: "500000000000000000000"
@@ -96,25 +96,37 @@ const lotto = {
     },
     errorData: {
         rewardsBreakdown: [250, 375, 625, 1250, 2500, 3000],
+        discountDivisor: 100,
+        charityFee: 5000,
+        treasuryFee: 5000,
+        cost: ethers.utils.parseUnits("0", 18),
+        ticketNumbers: [123412],
+
         distribution_length: [5, 10, 15, 20, 10],
         distribution_total: [5, 10, 15, 20],
         prize: ethers.utils.parseUnits("0", 18),
-        cost: ethers.utils.parseUnits("0", 18),
         startTime: ethers.utils.parseUnits("0", 18),
-        ticketNumbers: [22, 15, 35, 40],
         bucket: 0
     },
     errors: {
         invalid_operator: "Not operator",
         invalid_rewards_breakdown_total: "Rewards must equal 10000",
+        invalid_cost: "Outside of limits",
+        invalid_timestamp: "Lottery length outside of range",
+        invalid_divisor: "Discount divisor too low",
+        invalid_charity: "Charity fee too high",
+        invalid_treasury: "Treasury fee too high",
+        invalid_ticket_number: "Outside range",
+        invalid_ticket_numbers_count: "Too many tickets",
+        invalid_lottery: "Lottery is not open",
+        invalid_buying_time: "Lottery is over",
+        invalid_mint_approve: "ERC20: transfer amount exceeds allowance",
+
         invalid_admin: "Ownable: caller is not the owner",
         invalid_distribution_length: "Invalid distribution",
         invalid_distribution_total: "Prize distribution is not 100%",
-        invalid_price_or_cost: "Prize or cost cannot be 0",
-        invalid_timestamp: "Timestamps for lottery invalid",
         invalid_mint_timestamp: "Invalid time for mint",
         invalid_mint_numbers: "Invalid chosen numbers",
-        invalid_mint_approve: "ERC20: transfer amount exceeds allowance",
         invalid_draw_time: "Cannot set winning numbers during lottery",
         invalid_draw_repeat: "Lottery State incorrect for draw",
         invalid_claim_time: "Wait till end to claim",
@@ -131,15 +143,12 @@ const lotto = {
 function generateLottoNumbers({
     numberOfTickets,
     lottoSize,
-    maxRange
 }) {
     var numberOfNumbers = [];
     let counterForNumbers = 0;
     for (let i = 0; i < numberOfTickets; i++) {
-        for (let j = 0; j < lottoSize; j++) {
-            numberOfNumbers[counterForNumbers] = Math.floor(Math.random() * maxRange + 1); 
-            counterForNumbers += 1;
-        }
+        numberOfNumbers[counterForNumbers] = Math.floor(Math.random() * (10 ** lottoSize)) + (10 ** lottoSize); 
+        counterForNumbers += 1;
     }
     return numberOfNumbers;
 }
@@ -147,5 +156,5 @@ function generateLottoNumbers({
 module.exports = {
     lotto,
     BigNumber,
-    generateLottoNumbers
+    generateLottoNumbers,
 }
