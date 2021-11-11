@@ -16,6 +16,10 @@ contract Mock_erc20 is ERC20 {
         _mint(_to, _amount);
     }
 
+    function burn(uint256 _value) public {
+        _burn(msg.sender, _value);
+    }
+
     /**
      * @dev This function is only here to accommodate nested Link token 
      *      functionality required in mocking the random number calls.

@@ -4,6 +4,7 @@ const {
     lotto,
     BigNumber,
     generateLottoNumbers,
+    getMatchBrackets,
 } = require("./settings.js");
 
 describe("Lottery contract", function() {
@@ -313,7 +314,6 @@ describe("Lottery contract", function() {
             let ticketNumbers = generateLottoNumbers({
                 numberOfTickets: 1,
                 lottoSize: lotto.setup.sizeOfLottery,
-                maxRange: lotto.setup.maxValidRange
             });
             // Approving lottery to spend cost
             await luchowInstance.approve(
@@ -349,7 +349,6 @@ describe("Lottery contract", function() {
             let ticketNumbers = generateLottoNumbers({
                 numberOfTickets: 10,
                 lottoSize: lotto.setup.sizeOfLottery,
-                maxRange: lotto.setup.maxValidRange
             });
             // Approving lottery to spend cost
             await luchowInstance.approve(
@@ -411,7 +410,6 @@ describe("Lottery contract", function() {
             let ticketNumbers = generateLottoNumbers({
                 numberOfTickets: 105,
                 lottoSize: lotto.setup.sizeOfLottery,
-                maxRange: lotto.setup.maxValidRange
             });
             // Approving lottery to spend cost
             await luchowInstance.approve(
@@ -443,7 +441,6 @@ describe("Lottery contract", function() {
             let ticketNumbers = generateLottoNumbers({
                 numberOfTickets: 1,
                 lottoSize: lotto.setup.sizeOfLottery,
-                maxRange: lotto.setup.maxValidRange
             });
             // Approving lottery to spend cost
             await luchowInstance.approve(
@@ -475,7 +472,6 @@ describe("Lottery contract", function() {
             let ticketNumbers = generateLottoNumbers({
                 numberOfTickets: 1,
                 lottoSize: lotto.setup.sizeOfLottery,
-                maxRange: lotto.setup.maxValidRange
             });
             // Approving lottery to spend cost
             await luchowInstance.approve(
@@ -511,7 +507,6 @@ describe("Lottery contract", function() {
             let ticketNumbers = generateLottoNumbers({
                 numberOfTickets: 1,
                 lottoSize: lotto.setup.sizeOfLottery,
-                maxRange: lotto.setup.maxValidRange
             });
             // Batch buying tickets
             await expect(
@@ -520,6 +515,633 @@ describe("Lottery contract", function() {
                     ticketNumbers
                 )
             ).to.be.revertedWith(lotto.errors.invalid_mint_approve)
+        })
+    })
+
+    describe("Drawing numbers tests", function() {
+        beforeEach( async() => {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                );
+        })
+        /**
+         * Testing that the winning numbers can be set in the nominal case
+         */
+        it("Setting winning numbers", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+
+            const winningNumber = await randGenInstance.viewRandomResult();
+            
+            //Testing
+            assert.equal(
+                winningNumber,
+                lotto.newLotto.win.winningNumber,
+                "Winning numbers incorrect"
+            );
+        })
+        /**
+         * Testing that numbers cannot be closed once closed
+         */
+        it("Invalid close lottery (already closed)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )
+
+            await expect(
+                lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_close_repeat);
+        })
+        /**
+         * Testing that numbers cannot be closed while lottery still in
+         */
+        it("Invalid close lottery (time)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.closeIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await expect(
+                lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_close_time);
+        })
+        /**
+         * Testing that cannot draw before closed
+         */
+        it("Invalid draw (not closed)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await expect(
+                lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                    lotteryId,
+                    false
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_draw_not_closed);
+        })
+    })
+
+    describe("Claiming tickets tests", function() {
+        beforeEach( async() => {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                );
+
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                50
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 50,
+                lottoSize: lotto.setup.sizeOfLottery,
+            });
+
+            //Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(buyer).mint(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            // Batch buying tickets
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    ticketNumbers
+            );
+        });
+        /**
+         * Testing that claiming numbers (6 match) changes the users balance
+         * correctly.
+         */
+        it("Claiming winning numbers (6 (all) match)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+            // Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(owner).transfer(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            // Batch buying tickets
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    [lotto.newLotto.win.winningNumber]
+            );
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+            let buyerLuchowBalanceBefore = await luchowInstance.balanceOf(buyer.address);
+
+            await lotteryInstance.connect(buyer).claimTickets(
+                lotteryId,
+                [50],
+                [5]
+            );
+            let buyerLuchowBalanceAfter = await luchowInstance.balanceOf(buyer.address);
+            // Tests
+            assert.equal(
+                buyerLuchowBalanceBefore.toString(),
+                0,
+                "Buyer has luchow balance before claiming"
+            );
+            assert.equal(
+                buyerLuchowBalanceAfter.toString(),
+                lotto.newLotto.win.match_all.toString(),
+                "User won incorrect amount"
+            );
+        });
+        /**
+         * Testing that claiming numbers (5 match) changes the users balance
+         * correctly.
+         */
+        it("Claiming winning numbers (5 match)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+            // Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(owner).transfer(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            // Batch buying tickets
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    [lotto.newLotto.win.winningNumber_five]
+            );
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+            let buyerLuchowBalanceBefore = await luchowInstance.balanceOf(buyer.address);
+
+            await lotteryInstance.connect(buyer).claimTickets(
+                lotteryId,
+                [50],
+                [4]
+            );
+            let buyerLuchowBalanceAfter = await luchowInstance.balanceOf(buyer.address);
+            // Tests
+            assert.equal(
+                buyerLuchowBalanceBefore.toString(),
+                0,
+                "Buyer has luchow balance before claiming"
+            );
+            assert.equal(
+                buyerLuchowBalanceAfter.toString(),
+                lotto.newLotto.win.match_five.toString(),
+                "User won incorrect amount"
+            );
+        });
+        /**
+         * Testing that claiming numbers (4 match) changes the users balance
+         * correctly.
+         */
+        it("Claiming winning numbers (4 match)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+            // Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(owner).transfer(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            // Batch buying tickets
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    [lotto.newLotto.win.winningNumber_four]
+            );
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+            let buyerLuchowBalanceBefore = await luchowInstance.balanceOf(buyer.address);
+
+            await lotteryInstance.connect(buyer).claimTickets(
+                lotteryId,
+                [50],
+                [3]
+            );
+            let buyerLuchowBalanceAfter = await luchowInstance.balanceOf(buyer.address);
+            // Tests
+            assert.equal(
+                buyerLuchowBalanceBefore.toString(),
+                0,
+                "Buyer has luchow balance before claiming"
+            );
+            assert.equal(
+                buyerLuchowBalanceAfter.toString(),
+                lotto.newLotto.win.match_four.toString(),
+                "User won incorrect amount"
+            );
+        });
+        /**
+         * Testing that claiming numbers (0 match) changes the users balance
+         * correctly.
+         */
+        it("Claiming winning numbers (0 (none) match)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+            // Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(owner).transfer(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            // Batch buying tickets
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    [lotto.newLotto.win.winningNumber_none]
+            );
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+            let buyerLuchowBalanceBefore = await luchowInstance.balanceOf(buyer.address);
+
+            await expect(lotteryInstance.connect(buyer).claimTickets(
+                lotteryId,
+                [50],
+                [4]
+            )).to.be.revertedWith(lotto.errors.invalid_prize);
+
+            let buyerLuchowBalanceAfter = await luchowInstance.balanceOf(buyer.address);
+            // Tests
+            assert.equal(
+                buyerLuchowBalanceBefore.toString(),
+                0,
+                "Buyer has luchow balance before claiming"
+            );
+            assert.equal(
+                buyerLuchowBalanceAfter.toString(),
+                0,
+                "User won incorrect amount"
+            );
+        });
+        /**
+         * Testing that only the owner of a token can claim winnings
+         */
+        it("Invalid claim (not owner)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+
+            await expect(
+                    lotteryInstance.connect(owner).claimTickets(
+                    lotteryId,
+                    [25],
+                    [5]
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_claim_owner);
+        });
+    });
+    
+    describe("Batch claiming tickets tests", function() {
+        beforeEach( async() => {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+                );
+
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the price to buy
+            let price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                49
+            );
+
+            // Generating chosen numbers for buy
+            let ticketNumbers = generateLottoNumbers({
+                numberOfTickets: 49,
+                lottoSize: lotto.setup.sizeOfLottery,
+            });
+
+            //Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(buyer).mint(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            
+            // Batch buying tickets
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    ticketNumbers
+            );
+            price = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                1
+            );
+            // Sending the buyer the needed amount of luchow
+            await luchowInstance.connect(owner).transfer(
+                buyer.address,
+                price
+            );
+            // Approving lottery to spend cost
+            await luchowInstance.connect(buyer).approve(
+                lotteryInstance.address,
+                price
+            );
+            await lotteryInstance.connect(buyer).buyTickets(
+                    lotteryId,
+                    [lotto.newLotto.win.winningNumber]
+            );
+            // Setting the time forward
+            await ethers.provider.send("evm_increaseTime", [lotto.newLotto.endIncrease]);
+            await ethers.provider.send("evm_mine", []);
+        });
+
+        it("Batch claiming winning numbers (multiple match)", async function() {
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting all users bought tickets
+            let userTicketInfo = await lotteryInstance.viewUserInfoForLotteryId(
+                buyer.address,
+                lotteryId,
+                0,
+                50
+            );
+            let userTicketIds = userTicketInfo[0];
+            let userTicketNumbers = userTicketInfo[1];
+            let bucketInfo = getMatchBrackets(
+                userTicketIds,
+                userTicketNumbers,
+                lotto.newLotto.win.winningNumber
+            );
+            // Close Lottery
+            await(await lotteryInstance.connect(operator).closeLottery(
+                    lotteryId
+            )).wait();
+
+            const requestId = await randGenInstance.latestRequestId();
+            
+            // Mocking the VRF Coordinator contract for random request fulfilment 
+            await mock_vrfCoordInstance.connect(owner).callBackWithRandomness(
+                requestId,
+                lotto.draw.random,
+                randGenInstance.address
+            );
+
+            await lotteryInstance.connect(operator).drawFinalNumberAndMakeLotteryClaimable(
+                lotteryId,
+                false
+            );
+            let buyerLuchowBalanceBefore = await luchowInstance.balanceOf(buyer.address);
+
+            await lotteryInstance.connect(buyer).claimTickets(
+                lotteryId,
+                bucketInfo.ticketIds,
+                bucketInfo.ticketBuckets
+            );
+            let buyerLuchowBalanceAfter = await luchowInstance.balanceOf(buyer.address);
+            // Tests
+            assert.equal(
+                buyerLuchowBalanceBefore.toString(),
+                0,
+                "Buyer has luchow balance before claiming"
+            );
+            assert.notEqual(
+                buyerLuchowBalanceAfter.toString(),
+                buyerLuchowBalanceBefore.toString(),
+                "User balance has not changed"
+            );
+            assert.notEqual(
+                buyerLuchowBalanceAfter.toString(),
+                lotto.newLotto.win.match_all.toString(),
+                "User won incorrect amount"
+            );
         })
     })
 });
