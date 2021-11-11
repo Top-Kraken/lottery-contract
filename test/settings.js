@@ -40,14 +40,13 @@ const lotto = {
         endIncrease: 20000,
         discountDivisor: 2000,
         win: {
-            blankWinningNumbers: "0,0,0,0",
-            simpleWinningNumbers: "1,2,3,4",
-            winningNumbers: "18,17,5,3",
-            winningNumbersArr: [ 18, 17, 5, 3 ],
-            match_all: ethers.utils.parseUnits("500", 18),
-            match_three: ethers.utils.parseUnits("350", 18),
-            match_two: ethers.utils.parseUnits("100", 18),
-            match_one: ethers.utils.parseUnits("50", 18),
+            winningNumber: 1940628,
+            winningNumber_five: 1040628,
+            winningNumber_four: 1000628,
+            winningNumber_none: 1940620,
+            match_all: ethers.utils.parseUnits("1991", 17),
+            match_five: ethers.utils.parseUnits("9955", 16),
+            match_four: ethers.utils.parseUnits("49775", 15),
         }
     }, 
     chainLink: {
@@ -121,6 +120,12 @@ const lotto = {
         invalid_lottery: "Lottery is not open",
         invalid_buying_time: "Lottery is over",
         invalid_mint_approve: "ERC20: transfer amount exceeds allowance",
+        invalid_close_repeat: "Lottery not open",
+        invalid_close_time: "Lottery not over",
+        invalid_draw_not_closed: "Lottery not close",
+        invalid_prize: "No prize for this bracket",
+        invalid_claim_draw: "Lottery not claimable",
+        invalid_claim_owner: "Not the owner",
 
         invalid_admin: "Ownable: caller is not the owner",
         invalid_distribution_length: "Invalid distribution",
@@ -130,8 +135,6 @@ const lotto = {
         invalid_draw_time: "Cannot set winning numbers during lottery",
         invalid_draw_repeat: "Lottery State incorrect for draw",
         invalid_claim_time: "Wait till end to claim",
-        invalid_claim_draw: "Winning Numbers not chosen yet",
-        invalid_claim_owner: "Only the owner can claim",
         invalid_claim_duplicate: "Ticket already claimed",
         invalid_claim_lottery: "Ticket not for this lottery",
         invalid_size_update_duplicate: "Cannot set to current size",
@@ -152,9 +155,35 @@ function generateLottoNumbers({
     }
     return numberOfNumbers;
 }
+function getMatchBrackets(
+    userTicketIds,
+    userTicketNumbers,
+    winning_number
+) {
+    var ticketIds = [];
+    var ticketNumbers = [];
+    var ticketBuckets = [];
+    for ( let i = 0; i < userTicketNumbers.length; i ++ ) {
+        for ( let j = 0; j < 6; j ++ ) {
+            let divisor = 10**(6 -j);
+            if ( userTicketNumbers[i] % divisor == winning_number % divisor ) {
+                ticketIds.push(userTicketIds[i]);
+                ticketNumbers.push(userTicketNumbers[i]);
+                ticketBuckets.push(5 - j);
+                break;
+            }
+        }
+    }
+    return {
+        ticketIds,
+        ticketNumbers,
+        ticketBuckets
+    };
+}
 
 module.exports = {
     lotto,
     BigNumber,
     generateLottoNumbers,
+    getMatchBrackets,
 }
