@@ -1143,5 +1143,184 @@ describe("Lottery contract", function() {
                 "User won incorrect amount"
             );
         })
-    })
+    });
+
+    describe("Upgrade functionality tests", function() {
+        /**
+         * Tests that an admin can update the min and max ticket price in luchow
+         */
+        it("Update min and max ticket price in luchow", async function() {
+            // Getting the min and max ticket price in luchow
+            let minPriceTicketInLuchowBefore = await lotteryInstance.minPriceTicketInLuchow();
+            let maxPriceTicketInLuchowBefore = await lotteryInstance.maxPriceTicketInLuchow();
+            // Updating the min and max ticket price in luchow
+            await lotteryInstance.setMinAndMaxTicketPriceInLuchow(
+                lotto.update.minPriceTicket, 
+                lotto.update.maxPriceTicket
+            );
+            // Getting the min and max ticket price in luchow after the update
+            let minPriceTicketInLuchowAfter = await lotteryInstance.minPriceTicketInLuchow();
+            let maxPriceTicketInLuchowAfter = await lotteryInstance.maxPriceTicketInLuchow();
+
+            // Testing
+            assert.equal(
+                minPriceTicketInLuchowBefore.toString(),
+                lotto.setup.minPriceTicket,
+                "Min ticket price in luchow incorrect"
+            );
+            assert.equal(
+                maxPriceTicketInLuchowBefore.toString(),
+                lotto.setup.maxPriceTicket,
+                "Max ticket price in luchow incorrect"
+            );
+            assert.equal(
+                minPriceTicketInLuchowAfter.toString(),
+                lotto.update.minPriceTicket,
+                "Min ticket price in luchow incorrect after update"
+            );
+            assert.equal(
+                maxPriceTicketInLuchowAfter.toString(),
+                lotto.update.maxPriceTicket,
+                "Max ticket price in luchow incorrect after update"
+            );
+        });
+        /**
+         * Tests that a non owner cannot update min and max ticket price in luchow
+         */
+        it("Invalid update min and max ticket price in luchow (non-owner)", async function() {
+            // Updating the min and max ticket price in luchow
+            await expect(
+                    lotteryInstance.connect(buyer).setMinAndMaxTicketPriceInLuchow(
+                    lotto.update.minPriceTicket, 
+                    lotto.update.maxPriceTicket
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_owner);
+        });
+        /**
+         * Tests that an admin can update max number of tickets
+         */
+        it("Update max number of tickets", async function() {
+            // Getting the max number of tickets
+            let maxNumberTicketsPerBuyBefore = await lotteryInstance.maxNumberTicketsPerBuyOrClaim();
+            // Updating max number of tickets
+            await lotteryInstance.setMaxNumberTicketsPerBuy(
+                lotto.update.maxNumberTicketsPerBuy
+            );
+            // Getting the max number of tickets after update
+            let maxNumberTicketsPerBuyAfter = await lotteryInstance.maxNumberTicketsPerBuyOrClaim();
+
+            // Testing
+            assert.equal(
+                maxNumberTicketsPerBuyBefore.toString(),
+                lotto.setup.maxNumberTicketsPerBuy,
+                "Max number of tickets incorrect"
+            );
+            assert.equal(
+                maxNumberTicketsPerBuyAfter.toString(),
+                lotto.update.maxNumberTicketsPerBuy,
+                "Max number of tickets incorrect after update"
+            );
+        });
+        /**
+         * Tests that a non owner cannot set max number of tickets
+         */
+        it("Invalid update max number of tickets (non-owner)", async function() {
+            // Setting the max number of tickets
+            await expect(
+                    lotteryInstance.connect(buyer).setMaxNumberTicketsPerBuy(
+                    lotto.update.maxNumberTicketsPerBuy, 
+                )
+            ).to.be.revertedWith(lotto.errors.invalid_owner);
+        });
+    });
+
+    describe("View function tests", function() {
+        it("Get ticket price with discount", async function() {
+            // Getting prices
+            let pricesBucketOne = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                10
+            );
+            let pricesBucketTwo = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                35
+            );
+            let pricesBucketThree = await lotteryInstance.calculateTotalPriceForBulkTickets(
+                lotto.newLotto.discountDivisor,
+                lotto.newLotto.cost,
+                51
+            );
+            // Testing
+            assert.equal(
+                pricesBucketOne.toString(),
+                lotto.discount.ten,
+                "Discount cost for buy of 10 incorrect"
+            );
+            assert.equal(
+                pricesBucketTwo.toString(),
+                lotto.discount.thirty_five,
+                "Discount cost for buy of 35 incorrect"
+            );
+            assert.equal(
+                pricesBucketThree.toString(),
+                lotto.discount.fifty_one,
+                "Discount cost for buy of 51 incorrect"
+            );
+        });
+
+        it("Get Lottery Info", async function() {
+            // Getting the current block timestamp
+            let currentTime = await timerInstance.getCurrentTime();
+            // Converting to a BigNumber for manipulation 
+            let timeStamp = new BigNumber(currentTime.toString());
+
+            // Starting a new lottery
+            await lotteryInstance.connect(operator).startLottery(
+                    timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                    lotto.newLotto.cost,
+                    lotto.newLotto.discountDivisor,
+                    lotto.newLotto.rewardsBreakdown,
+                    lotto.newLotto.burnFee,
+                    lotto.newLotto.treasuryFee,
+                    lotto.newLotto.charityFee,
+            );
+            // Getting lottery id
+            let lotteryId = await lotteryInstance.viewCurrentLotteryId();
+            // Getting the info around this lottery
+            let lotteryInfo = await lotteryInstance.viewLottery(lotteryId);
+            // Testing they are correct
+            assert.equal(
+                lotteryInfo.endTime.toString(),
+                timeStamp.plus(lotto.newLotto.endIncrease).toString(),
+                "Invalid end time"
+            );
+            assert.equal(
+                lotteryInfo.discountDivisor.toString(),
+                lotto.newLotto.discountDivisor.toString(),
+                "Invalid discount divisor"
+            );
+            assert.equal(
+                lotteryInfo.rewardsBreakdown.toString(),
+                lotto.newLotto.rewardsBreakdown.toString(),
+                "Invalid rewards breakdown"
+            );
+            assert.equal(
+                lotteryInfo.burnFee.toString(),
+                lotto.newLotto.burnFee.toString(),
+                "Invalid burn fee"
+            );
+            assert.equal(
+                lotteryInfo.treasuryFee.toString(),
+                lotto.newLotto.treasuryFee.toString(),
+                "Invalid treasury fee"
+            );
+            assert.equal(
+                lotteryInfo.charityFee.toString(),
+                lotto.newLotto.charityFee.toString(),
+                "Invalid charity fee"
+            );
+        })
+    });
 });
