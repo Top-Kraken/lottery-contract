@@ -1,3 +1,6 @@
+const { 
+    lotto,
+} = require("../test/settings.js");
 
 // The deployment script
 const main = async() => {
@@ -31,10 +34,10 @@ const main = async() => {
     mock_vrfCoordContract = await ethers.getContractFactory("Mock_VRFCoordinator");
 
     // Deploys the contracts
-    luchowInstance = await mock_erc20Contract.deployer(
+    luchowInstance = await mock_erc20Contract.deploy(
         lotto.buy.luchow,
     );
-    linkInstance = await mock_erc20Contract.deployer(
+    linkInstance = await mock_erc20Contract.deploy(
         lotto.buy.luchow,
     );
     mock_vrfCoordInstance = await mock_vrfCoordContract.deploy(

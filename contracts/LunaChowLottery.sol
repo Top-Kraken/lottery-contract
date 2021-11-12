@@ -292,7 +292,6 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
         uint256 amountToWithdrawToBurn;
         uint256 amountToWithdrawToTreasury;
         uint256 amountToWithdrawToCharity;
-        uint256 amountRest;
 
         // Calculate prizes in LUCHOW for each bracket by starting from the highest one
         for (uint32 i = 0; i < 6; i++) {
@@ -310,7 +309,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
             ) {
                 // B. If rewards at this bracket are > 0, calculate, else, report the numberAddresses from previous bracket
                 if (_lotteries[_lotteryId].rewardsBreakdown[j] != 0) {
-                    _lotteries[_lotteryId].luchowPerBracket[j] = (_lotteries[_lotteryId].rewardsBreakdown[j] * amountToShareToWinners) / (_numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] - numberAddressesInPreviousBracket);
+                    _lotteries[_lotteryId].luchowPerBracket[j] = (_lotteries[_lotteryId].rewardsBreakdown[j] * _lotteries[_lotteryId].amountCollectedInLuchow) / (_numberTicketsPerLotteryId[_lotteryId][transformedWinningNumber] - numberAddressesInPreviousBracket);
                     _lotteries[_lotteryId].luchowPerBracket[j] /= 10000;
 
                     // Update numberAddressesInPreviousBracket
@@ -321,7 +320,7 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
                 _lotteries[_lotteryId].luchowPerBracket[j] = 0;
 
                 amountToWithdrawToTreasury +=
-                    (_lotteries[_lotteryId].rewardsBreakdown[j] * amountToShareToWinners) /
+                    (_lotteries[_lotteryId].rewardsBreakdown[j] * _lotteries[_lotteryId].amountCollectedInLuchow) /
                     10000;
             }
         }
@@ -335,9 +334,8 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
             amountToWithdrawToTreasury = 0;
         }
 
-        amountRest = _lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners;
-        amountToWithdrawToBurn += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners) * _lotteries[_lotteryId].burnFee / (_lotteries[_lotteryId].treasuryFee + _lotteries[_lotteryId].burnFee + _lotteries[_lotteryId].charityFee);
-        amountToWithdrawToCharity += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners) * _lotteries[_lotteryId].charityFee / (_lotteries[_lotteryId].treasuryFee + _lotteries[_lotteryId].burnFee + _lotteries[_lotteryId].charityFee);
+        amountToWithdrawToBurn += _lotteries[_lotteryId].amountCollectedInLuchow * _lotteries[_lotteryId].burnFee / 10000;
+        amountToWithdrawToCharity += _lotteries[_lotteryId].amountCollectedInLuchow * _lotteries[_lotteryId].charityFee / 10000;
         amountToWithdrawToTreasury += (_lotteries[_lotteryId].amountCollectedInLuchow - amountToShareToWinners - amountToWithdrawToBurn - amountToWithdrawToCharity);
 
         // Burn LUCHOW token
@@ -431,8 +429,11 @@ contract LunaChowLottery is ReentrancyGuard, ILunaChowLottery, Ownable {
                 _rewardsBreakdown[2] +
                 _rewardsBreakdown[3] +
                 _rewardsBreakdown[4] +
-                _rewardsBreakdown[5]) == 10000,
-            "Rewards must equal 10000"
+                _rewardsBreakdown[5] + 
+                _burnFee + 
+                _treasuryFee + 
+                _charityFee) == 10000,
+            "Sum of rewards and fees must equal 10000"
         );
 
         currentLotteryId++;

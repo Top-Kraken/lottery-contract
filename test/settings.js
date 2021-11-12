@@ -3,37 +3,21 @@ const { BigNumber } = require("bignumber.js");
 
 const lotto = {
     setup: {
+        minPriceTicket: ethers.utils.parseUnits("5", "15"),
+        maxPriceTicket: ethers.utils.parseUnits("50", "18"),
+        maxNumberTicketsPerBuy: 100,
         sizeOfLottery: 6,
-        maxValidRange: 10,
-        bucket: {
-            one: 20,
-            two: 50
-        },
-        bucketDiscount: {
-            one: 5,
-            two: 10,
-            three: 15
-        }
     },
     update: {
-        sizeOfLottery: 5,
-        maxValidRange: 100,
-        bucket: {
-            one: 30,
-            two: 50
-        },
-        bucketDiscount: {
-            one: 1,
-            two: 5,
-            three: 10
-        }
+        minPriceTicket: ethers.utils.parseUnits("10", "15"),
+        maxPriceTicket: ethers.utils.parseUnits("60", "18"),
+        maxNumberTicketsPerBuy: 120,
     },
     newLotto: {
-        rewardsBreakdown: [250, 375, 625, 1250, 2500, 5000],
+        rewardsBreakdown: [100, 300, 500, 1000, 2000, 4000],
         burnFee: 100,
-        treasuryFee: 900,
+        treasuryFee: 1000,
         charityFee: 1000,
-        distribution: [5, 10, 35, 50],
         prize: ethers.utils.parseUnits("1000", 18),
         cost: ethers.utils.parseUnits("10", 18),
         closeIncrease: 10000,
@@ -53,11 +37,6 @@ const lotto = {
         keyHash: "0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4",
         fee: ethers.utils.parseUnits("1", 19)
     },
-    events: {
-        new: "LotteryOpen",
-        mint: "NewBatchMint",
-        request: "requestNumbers"
-    },
     buy: {
         luchow: ethers.utils.parseUnits("10000000", 18),
         one: {
@@ -66,50 +45,26 @@ const lotto = {
         ten: {
             cost: "99550000000000000000"
         },
-        fifty: {
-            cost: "500000000000000000000"
-        },
-        max: {
-            cost: "560000000000000000000"
-        }
     },
     discount: {
-        ten: {
-            cost: "100000000000000000000",
-            discount: "5000000000000000000",
-            discountCost: "95000000000000000000"
-        },
-        thirty_five: {
-            cost: "350000000000000000000",
-            discount: "35000000000000000000",
-            discountCost: "315000000000000000000"
-        },
-        fifty_one: {
-            cost: "510000000000000000000",
-            discount: "76500000000000000000",
-            discountCost: "433500000000000000000"
-        },
+        ten: "99550000000000000000",
+        thirty_five: "344050000000000000000",
+        fifty_one: "497250000000000000000",
     },
     draw: {
         random: ethers.utils.parseUnits("71812290232383789158325313353218754072886144180308695307717334628590412940628", 0)
     },
     errorData: {
-        rewardsBreakdown: [250, 375, 625, 1250, 2500, 3000],
+        rewardsBreakdown: [100, 300, 500, 1000, 2000, 3000],
         discountDivisor: 100,
         charityFee: 5000,
         treasuryFee: 5000,
         cost: ethers.utils.parseUnits("0", 18),
         ticketNumbers: [123412],
-
-        distribution_length: [5, 10, 15, 20, 10],
-        distribution_total: [5, 10, 15, 20],
-        prize: ethers.utils.parseUnits("0", 18),
-        startTime: ethers.utils.parseUnits("0", 18),
-        bucket: 0
     },
     errors: {
         invalid_operator: "Not operator",
-        invalid_rewards_breakdown_total: "Rewards must equal 10000",
+        invalid_rewards_breakdown_total: "Sum of rewards and fees must equal 10000",
         invalid_cost: "Outside of limits",
         invalid_timestamp: "Lottery length outside of range",
         invalid_divisor: "Discount divisor too low",
@@ -126,21 +81,7 @@ const lotto = {
         invalid_prize: "No prize for this bracket",
         invalid_claim_draw: "Lottery not claimable",
         invalid_claim_owner: "Not the owner",
-
-        invalid_admin: "Ownable: caller is not the owner",
-        invalid_distribution_length: "Invalid distribution",
-        invalid_distribution_total: "Prize distribution is not 100%",
-        invalid_mint_timestamp: "Invalid time for mint",
-        invalid_mint_numbers: "Invalid chosen numbers",
-        invalid_draw_time: "Cannot set winning numbers during lottery",
-        invalid_draw_repeat: "Lottery State incorrect for draw",
-        invalid_claim_time: "Wait till end to claim",
-        invalid_claim_duplicate: "Ticket already claimed",
-        invalid_claim_lottery: "Ticket not for this lottery",
-        invalid_size_update_duplicate: "Cannot set to current size",
-        invalid_numbers_range: "Numbers for ticket invalid",
-        invalid_bucket_range: "Bucket range cannot be 0",
-        invalid_bucket_discount: "Discounts must increase"
+        invalid_owner: "Ownable: caller is not the owner",
     }
 }
 function generateLottoNumbers({

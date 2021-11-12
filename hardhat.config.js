@@ -2,6 +2,7 @@ require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-ethers");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
+
 /**
  * @type import('hardhat/config').HardhatUserConfig
  */
@@ -12,6 +13,11 @@ module.exports = {
     gasPrice: 21
   },
   networks: {
+    testnet: {
+      url: process.env.URL || "",
+      accounts:
+        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    },
     hardhat: {
       mining: {
         auto: false,
@@ -40,6 +46,7 @@ module.exports = {
 		settings: {
       optimizer: {
         enabled: true,
+        runs: 200,
       },
     },
   } 
